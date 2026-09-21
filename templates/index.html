@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CaptionAI — AI-Powered Image Caption Generator</title>
+
+  <!-- Google Fonts: Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <!-- Tailwind Play CDN (CDN must load first, then config) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { poppins: ['Poppins', 'sans-serif'] },
+          colors: {
+            brand: {
+              50: '#f0f4ff', 100: '#e0eaff', 200: '#c4d4ff',
+              300: '#9ab5ff', 400: '#6d8eff', 500: '#4361ee',
+              600: '#3a4fd4', 700: '#2f3faa', 800: '#263288', 900: '#1e286e',
+            },
+            accent: { 400: '#7c3aed', 500: '#6d28d9', 600: '#5b21b6' },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body class="font-poppins bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300 min-h-screen">
+
+  <!-- ░░ Floating particles background ░░ -->
+  <canvas id="particles-canvas" class="fixed inset-0 pointer-events-none z-0"></canvas>
+
+  <!-- ░░ Toast container ░░ -->
+  <div id="toast-container" class="fixed top-6 right-6 z-[9999] flex flex-col gap-3 items-end"></div>
+
+  <!-- ░░ Loading overlay (model warmup) ░░ -->
+  <div id="model-loading-overlay" class="fixed inset-0 z-[9998] flex-col items-center justify-center bg-gray-950/80 backdrop-blur-sm hidden">
+    <div class="glass-card rounded-2xl p-10 flex flex-col items-center gap-5 max-w-sm mx-4 text-center">
+      <div class="spinner-ring"></div>
+      <h3 class="text-xl font-semibold text-white">Loading AI Model</h3>
+      <p class="text-gray-300 text-sm">The BLIP captioning model is warming up.<br />This only happens once.</p>
+      <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
+        <div id="model-progress-bar" class="h-full bg-gradient-to-r from-brand-500 to-accent-400 rounded-full model-progress-anim"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       NAVBAR
+  ============================================================ -->
+  <nav class="fixed top-0 left-0 right-0 z-50 navbar-glass">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <!-- Logo -->
+        <a href="#" class="flex items-center gap-2.5 group">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-accent-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+            <i class="fa-solid fa-camera-retro text-white text-sm"></i>
+          </div>
+          <span class="text-xl font-bold bg-gradient-to-r from-brand-500 to-accent-400 bg-clip-text text-transparent">CaptionAI</span>
+        </a>
+
+        <!-- Nav links (desktop) -->
+        <div class="hidden md:flex items-center gap-8">
+          <a href="#upload" class="nav-link text-sm font-medium">Upload</a>
+          <a href="#features" class="nav-link text-sm font-medium">Features</a>
+          <a href="#history" class="nav-link text-sm font-medium">History</a>
+        </div>
+
+        <!-- Right controls -->
+        <div class="flex items-center gap-3">
+          <!-- Dark-mode toggle -->
+          <button id="theme-toggle" aria-label="Toggle dark mode"
+            class="w-10 h-10 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors">
+            <i id="theme-icon" class="fa-solid fa-moon text-base"></i>
+          </button>
+          <!-- CTA -->
+          <a href="#upload" class="hidden sm:inline-flex btn-primary text-sm">
+            <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i> Generate Caption
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       HERO
+  ============================================================ -->
+  <section class="relative min-h-screen flex items-center pt-16 overflow-hidden hero-gradient">
+    <!-- Gradient blobs -->
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 text-center">
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-200 dark:border-brand-800 bg-brand-50/60 dark:bg-brand-950/60 text-brand-600 dark:text-brand-300 text-xs font-semibold mb-6 backdrop-blur-sm">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+        Powered by Salesforce BLIP · Hugging Face Transformers
+      </div>
+
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black leading-tight mb-6">
+        Transform Images into<br />
+        <span class="bg-gradient-to-r from-brand-500 via-accent-400 to-pink-500 bg-clip-text text-transparent">Compelling Captions</span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto mb-10 leading-relaxed">
+        Upload any image and let our AI generate professional, creative, funny, or Instagram-ready captions in seconds. Free, fast and beautiful.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="#upload" class="btn-primary text-base px-8 py-3.5 shadow-2xl shadow-brand-500/30">
+          <i class="fa-solid fa-upload mr-2"></i> Upload an Image
+        </a>
+        <a href="#features" class="btn-ghost text-base px-8 py-3.5">
+          <i class="fa-solid fa-circle-play mr-2"></i> See How It Works
+        </a>
+      </div>
+
+      <!-- Stats row -->
+      <div class="mt-16 flex flex-wrap items-center justify-center gap-8">
+        <div class="stat-pill">
+          <i class="fa-solid fa-bolt text-yellow-400 mr-2"></i>
+          <span class="font-semibold">Instant</span> <span class="text-gray-400 ml-1 text-sm">Results</span>
+        </div>
+        <div class="stat-pill">
+          <i class="fa-solid fa-palette text-pink-400 mr-2"></i>
+          <span class="font-semibold">4</span> <span class="text-gray-400 ml-1 text-sm">Caption Styles</span>
+        </div>
+        <div class="stat-pill">
+          <i class="fa-solid fa-hashtag text-brand-400 mr-2"></i>
+          <span class="font-semibold">Auto</span> <span class="text-gray-400 ml-1 text-sm">Hashtags</span>
+        </div>
+        <div class="stat-pill">
+          <i class="fa-solid fa-shield-halved text-green-400 mr-2"></i>
+          <span class="font-semibold">100%</span> <span class="text-gray-400 ml-1 text-sm">Private</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scroll hint -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
+      <i class="fa-solid fa-chevron-down text-gray-400 dark:text-gray-600 text-xl"></i>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FEATURES
+  ============================================================ -->
+  <section id="features" class="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl sm:text-4xl font-bold mb-4">Everything You Need</h2>
+      <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto">A full-featured AI caption suite — no sign-up required.</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Feature cards -->
+      <div class="feature-card group">
+        <div class="feature-icon bg-blue-500/10 dark:bg-blue-500/20 text-blue-500">
+          <i class="fa-solid fa-brain fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">BLIP AI Model</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">State-of-the-art Salesforce BLIP model understands complex visual scenes.</p>
+      </div>
+      <div class="feature-card group">
+        <div class="feature-icon bg-purple-500/10 dark:bg-purple-500/20 text-purple-500">
+          <i class="fa-solid fa-sliders fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">4 Caption Tones</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Professional, Funny, Instagram, and Creative — one click to switch styles.</p>
+      </div>
+      <div class="feature-card group">
+        <div class="feature-icon bg-pink-500/10 dark:bg-pink-500/20 text-pink-500">
+          <i class="fa-solid fa-hashtag fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">Auto Hashtags</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">AI extracts keywords and generates relevant hashtags automatically.</p>
+      </div>
+      <div class="feature-card group">
+        <div class="feature-icon bg-yellow-500/10 dark:bg-yellow-500/20 text-yellow-500">
+          <i class="fa-solid fa-face-smile fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">Emoji Suggestions</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Context-aware emoji recommendations matched to your image content.</p>
+      </div>
+      <div class="feature-card group">
+        <div class="feature-icon bg-green-500/10 dark:bg-green-500/20 text-green-500">
+          <i class="fa-solid fa-clock-rotate-left fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">Caption History</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Your last 10 captions are saved automatically — revisit anytime.</p>
+      </div>
+      <div class="feature-card group">
+        <div class="feature-icon bg-red-500/10 dark:bg-red-500/20 text-red-500">
+          <i class="fa-solid fa-volume-high fa-lg"></i>
+        </div>
+        <h3 class="font-semibold text-lg mb-1 group-hover:text-brand-500 transition-colors">Voice Readout</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Listen to your caption read aloud using the browser's speech engine.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       UPLOAD & GENERATE
+  ============================================================ -->
+  <section id="upload" class="py-24 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+    <div class="text-center mb-14">
+      <h2 class="text-3xl sm:text-4xl font-bold mb-4">Generate Your Caption</h2>
+      <p class="text-gray-500 dark:text-gray-400">Drop an image, choose your vibe, hit Generate — done.</p>
+    </div>
+
+    <!-- Main upload card -->
+    <div class="glass-card rounded-3xl p-6 sm:p-10 shadow-2xl">
+
+      <!-- ── Tone selector ── -->
+      <div class="mb-8">
+        <label class="block text-sm font-semibold text-gray-600 dark:text-gray-300 mb-3">Caption Style</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="tone-buttons">
+          <button data-tone="professional" class="tone-btn active">
+            <i class="fa-solid fa-briefcase mb-1"></i>
+            <span>Professional</span>
+          </button>
+          <button data-tone="funny" class="tone-btn">
+            <i class="fa-solid fa-face-grin-squint mb-1"></i>
+            <span>Funny</span>
+          </button>
+          <button data-tone="instagram" class="tone-btn">
+            <i class="fa-brands fa-instagram mb-1"></i>
+            <span>Instagram</span>
+          </button>
+          <button data-tone="creative" class="tone-btn">
+            <i class="fa-solid fa-paintbrush mb-1"></i>
+            <span>Creative</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Drop zone ── -->
+      <div id="drop-zone"
+        class="relative border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 hover:border-brand-400 dark:hover:border-brand-500 hover:bg-brand-50/40 dark:hover:bg-brand-950/20 group">
+        <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.webp" class="hidden" />
+
+        <!-- Idle state -->
+        <div id="drop-idle">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-brand-500/20 to-accent-400/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl text-brand-500 dark:text-brand-400"></i>
+          </div>
+          <p class="text-base font-semibold text-gray-700 dark:text-gray-300 mb-1">Drag & drop your image here</p>
+          <p class="text-sm text-gray-400 mb-4">or click to browse</p>
+          <p class="text-xs text-gray-400">Supports JPG, PNG, JPEG, WEBP · Max 10 MB</p>
+        </div>
+
+        <!-- Preview state (hidden by default) -->
+        <div id="drop-preview" class="hidden flex-col items-center gap-4">
+          <div class="relative inline-block">
+            <img id="preview-img" src="" alt="Preview" class="max-h-64 max-w-full rounded-xl shadow-lg object-contain" />
+            <button id="remove-image" class="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+          <div id="file-info" class="text-sm text-gray-500 dark:text-gray-400"></div>
+        </div>
+      </div>
+
+      <!-- ── Progress bar ── -->
+      <div id="progress-wrap" class="mt-5 hidden">
+        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+          <span id="progress-label">Processing…</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="w-full h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+          <div id="progress-bar" class="h-full bg-gradient-to-r from-brand-500 to-accent-400 rounded-full transition-all duration-300" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- ── Generate button ── -->
+      <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+        <button id="generate-btn" disabled
+          class="btn-primary flex items-center justify-center gap-2 px-10 py-4 text-base opacity-50 cursor-not-allowed transition-all">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span id="generate-btn-text">Generate Caption</span>
+        </button>
+        <button id="regenerate-btn" class="btn-ghost flex items-center justify-center gap-2 px-6 py-4 text-base hidden">
+          <i class="fa-solid fa-rotate"></i> Regenerate
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       RESULTS SECTION
+  ============================================================ -->
+  <section id="results" class="py-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto hidden">
+    <h2 class="text-2xl sm:text-3xl font-bold text-center mb-10">Your Caption Results</h2>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+
+      <!-- Left: Image + confidence -->
+      <div class="glass-card rounded-3xl p-6 shadow-xl">
+        <img id="result-img" src="" alt="Uploaded" class="w-full rounded-xl object-contain max-h-80 shadow-md mb-5" />
+
+        <!-- Confidence -->
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">AI Confidence</span>
+          <div class="flex-1 h-2.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div id="confidence-bar" class="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700" style="width:0%"></div>
+          </div>
+          <span id="confidence-score" class="text-xs font-bold text-emerald-500 whitespace-nowrap">0%</span>
+        </div>
+      </div>
+
+      <!-- Right: Caption + actions -->
+      <div class="flex flex-col gap-5">
+
+        <!-- Primary caption -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-bold uppercase tracking-widest text-brand-500 dark:text-brand-400" id="active-tone-label">Professional Caption</span>
+            <div class="flex items-center gap-2">
+              <!-- Word & char count -->
+              <span id="word-count" class="text-xs text-gray-400"></span>
+              <span class="text-xs text-gray-300 dark:text-gray-600">·</span>
+              <span id="char-count" class="text-xs text-gray-400"></span>
+            </div>
+          </div>
+
+          <!-- Caption with typing animation -->
+          <p id="caption-text" class="text-base sm:text-lg font-medium leading-relaxed text-gray-800 dark:text-gray-100 min-h-[4rem] typing-cursor"></p>
+
+          <!-- Action buttons -->
+          <div class="mt-5 flex flex-wrap gap-2">
+            <button id="copy-btn" class="action-btn">
+              <i class="fa-solid fa-copy mr-1.5"></i> Copy
+            </button>
+            <button id="voice-btn" class="action-btn">
+              <i class="fa-solid fa-volume-high mr-1.5"></i> Read Aloud
+            </button>
+            <button id="instagram-btn" class="action-btn">
+              <i class="fa-brands fa-instagram mr-1.5"></i> Instagram
+            </button>
+            <button id="download-btn" class="action-btn">
+              <i class="fa-solid fa-download mr-1.5"></i> Download
+            </button>
+          </div>
+        </div>
+
+        <!-- All tone variants -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <h4 class="text-sm font-bold text-gray-600 dark:text-gray-300 mb-4">All Caption Styles</h4>
+          <div id="caption-variants" class="flex flex-col gap-3"></div>
+        </div>
+
+        <!-- Emojis -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <h4 class="text-sm font-bold text-gray-600 dark:text-gray-300 mb-3">Suggested Emojis</h4>
+          <div id="emoji-container" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Hashtags -->
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-sm font-bold text-gray-600 dark:text-gray-300">Hashtags</h4>
+            <button id="copy-hashtags-btn" class="text-xs text-brand-500 hover:text-brand-600 font-medium transition-colors">
+              <i class="fa-solid fa-copy mr-1"></i> Copy All
+            </button>
+          </div>
+          <div id="hashtags-container" class="flex flex-wrap gap-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       HISTORY
+  ============================================================ -->
+  <section id="history" class="py-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-10">
+      <div>
+        <h2 class="text-2xl sm:text-3xl font-bold">Recent Captions</h2>
+        <p class="text-sm text-gray-400 mt-1">Your last 10 generated captions</p>
+      </div>
+      <button id="clear-history-btn" class="btn-ghost text-sm px-4 py-2 hidden">
+        <i class="fa-solid fa-trash-can mr-1.5"></i> Clear
+      </button>
+    </div>
+
+    <!-- Skeleton loader -->
+    <div id="history-skeleton" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div class="skeleton-card rounded-2xl h-48"></div>
+      <div class="skeleton-card rounded-2xl h-48"></div>
+      <div class="skeleton-card rounded-2xl h-48"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="history-empty" class="hidden text-center py-16">
+      <div class="w-20 h-20 mx-auto mb-5 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+        <i class="fa-solid fa-image text-3xl text-gray-300 dark:text-gray-600"></i>
+      </div>
+      <p class="text-gray-500 dark:text-gray-400 font-medium">No captions yet — upload an image to get started.</p>
+    </div>
+
+    <!-- History grid -->
+    <div id="history-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 hidden"></div>
+  </section>
+
+  <!-- ============================================================
+       FOOTER
+  ============================================================ -->
+  <footer class="border-t border-gray-200 dark:border-gray-800 py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-accent-400 flex items-center justify-center">
+          <i class="fa-solid fa-camera-retro text-white text-xs"></i>
+        </div>
+        <span class="font-bold text-lg bg-gradient-to-r from-brand-500 to-accent-400 bg-clip-text text-transparent">CaptionAI</span>
+      </div>
+
+      <p class="text-xs text-gray-400 text-center">
+        Built with <i class="fa-solid fa-heart text-red-400 mx-0.5"></i> using Python Flask · Hugging Face Transformers · Tailwind CSS
+      </p>
+
+      <div class="flex items-center gap-4">
+        <a href="#" aria-label="GitHub" class="social-icon"><i class="fa-brands fa-github fa-lg"></i></a>
+        <a href="#" aria-label="Twitter" class="social-icon"><i class="fa-brands fa-x-twitter fa-lg"></i></a>
+        <a href="#" aria-label="Instagram" class="social-icon"><i class="fa-brands fa-instagram fa-lg"></i></a>
+        <a href="#" aria-label="LinkedIn" class="social-icon"><i class="fa-brands fa-linkedin fa-lg"></i></a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Main JavaScript -->
+  <script src="/static/script.js"></script>
+</body>
+</html>
